@@ -1,4 +1,4 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
 //
 // BASIC PARAMETERS
@@ -270,6 +270,8 @@ param existingLogAnalyticsWorkspaceName string
 @description('Resource group of the existing Log Analytics workspace. Defaults to the deployment RG.')
 param existingLogAnalyticsWorkspaceResourceGroupName string = resourceGroupName
 
+param existingLogAnalyticsWorkspaceSubscriptionId string 
+
 
 //Exsiting Private Link scope:
 param existingPrivateLinkScopeName string 
@@ -288,6 +290,8 @@ param redisClusterName string
 param skuName string
 
 param redisPrivateEndpointName string
+
+param apimApplicationInsightsSubscriptionId string 
 
 module vnetExisting './modules/networking/vnet-existing.bicep' = if (useExistingVnet) {
   name: 'vnetExisting'
@@ -312,16 +316,19 @@ module monitoring './modules/monitor/monitoring.bicep' = {
   params: {
     location: location
     tags: tags
+    apimApplicationInsightsSubscriptionId: apimApplicationInsightsSubscriptionId
+    apimApplicationInsightsRgName: resourceGroupName
     privateLinkScopeName: existingPrivateLinkScopeName
     privateLinkScopeRgName: existingPrivateLinkScopeRG
     privateLinkScopeSubId: existingPrivateLinkScopeSubId
     logAnalyticsWorkspaceResourceId: existingLaw.id
     apimApplicationInsightsName: !empty(applicationInsightsName) ? applicationInsightsName : '${abbrs.insightsComponents}apim-${resourceToken}'
-    apimApplicationInsightsDashboardName: !empty(applicationInsightsDashboardName) ? applicationInsightsDashboardName : '${abbrs.portalDashboards}apim-${resourceToken}'
+    apimApplicationInsightsDashboardName: applicationInsightsDashboardName
     createDashboard: createAppInsightsDashboard
   }
   dependsOn: [
     vnetExisting
+    existingLaw
   ]
 }
 
@@ -332,7 +339,7 @@ resource existingOpenAi 'Microsoft.CognitiveServices/accounts@2023-05-01' existi
 
 resource existingLaw 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
   name: existingLogAnalyticsWorkspaceName
-  scope: resourceGroup(existingLogAnalyticsWorkspaceResourceGroupName)
+  scope: resourceGroup(existingLogAnalyticsWorkspaceSubscriptionId, existingLogAnalyticsWorkspaceResourceGroupName)
 } 
 
 
@@ -347,7 +354,7 @@ module contentSafety 'modules/ai/cognitiveservices.bicep' = {
     vNetName: vnetExisting.outputs.vnetName
     vNetLocation: vnetExisting.outputs.location
     privateEndpointSubnetName: vnetExisting.outputs.contentSafetyPrivateEndpointSubnetName
-    aiPrivateEndpointName: !empty(aiContentSafetyPrivateEndpointName) ? aiContentSafetyPrivateEndpointName : '${abbrs.cognitiveServicesAccounts}consafety-pe-${resourceToken}'
+    aiPrivateEndpointName: aiContentSafetyPrivateEndpointName
     publicNetworkAccess: aiContentSafetyExternalNetworkAccess
     openAiDnsZoneName: aiCogntiveServicesDnsZoneName
     sku: {
@@ -355,7 +362,7 @@ module contentSafety 'modules/ai/cognitiveservices.bicep' = {
     }
     vNetRG: vnetExisting.outputs.vnetRG
     dnsZoneRG: dnsZoneRG
-    dnsSubscriptionId: !empty(dnsSubscriptionId) ? dnsSubscriptionId : subscription().subscriptionId
+    dnsSubscriptionId: dnsSubscriptionId
   }
   dependsOn: [
     vnetExisting
@@ -366,7 +373,7 @@ module languageService 'modules/ai/cognitiveservices.bicep' = {
   name: 'ai-language-service'
   scope: resourceGroup(resourceGroupName)
   params: {
-    name: !empty(languageServiceName) ? languageServiceName : '${abbrs.cognitiveServicesAccounts}language-${resourceToken}'
+    name: languageServiceName
     location: location
     tags: tags
     kind: 'TextAnalytics'
@@ -381,7 +388,7 @@ module languageService 'modules/ai/cognitiveservices.bicep' = {
     }
     vNetRG: vnetExisting.outputs.vnetRG
     dnsZoneRG: dnsZoneRG
-    dnsSubscriptionId: !empty(dnsSubscriptionId) ? dnsSubscriptionId : subscription().subscriptionId
+    dnsSubscriptionId: dnsSubscriptionId
   }
   dependsOn: [
     vnetExisting
@@ -392,7 +399,7 @@ module eventHub './modules/event-hub/event-hub.bicep' = {
   name: 'event-hub'
   scope: resourceGroup(resourceGroupName)
   params: {
-    name: !empty(eventHubNamespaceName) ? eventHubNamespaceName : '${abbrs.eventHubNamespaces}${resourceToken}'
+    name: eventHubNamespaceName
     location: location
     tags: tags
     eventHubPrivateEndpointName: !empty(eventHubPrivateEndpointName) ? eventHubPrivateEndpointName : '${abbrs.eventHubNamespaces}pe-${resourceToken}'
@@ -402,7 +409,7 @@ module eventHub './modules/event-hub/event-hub.bicep' = {
     publicNetworkAccess: eventHubNetworkAccess
     vNetRG: vnetExisting.outputs.vnetRG
     dnsZoneRG: dnsZoneRG
-    dnsSubscriptionId: !empty(dnsSubscriptionId) ? dnsSubscriptionId : subscription().subscriptionId
+    dnsSubscriptionId: dnsSubscriptionId
     capacity: eventHubCapacityUnits
   }
   dependsOn: [
@@ -414,7 +421,7 @@ module apim './modules/apim/apim.bicep' = {
   name: 'apim'
   scope: resourceGroup(resourceGroupName)
   params: {
-    name: !empty(apimServiceName) ? apimServiceName : '${abbrs.apiManagementService}${resourceToken}'
+    name: apimServiceName
     location: location
     tags: tags
     applicationInsightsName: monitoring.outputs.applicationInsightsName
@@ -475,7 +482,7 @@ module cosmosDb './modules/cosmos-db/cosmos-db.bicep' = {
   name: 'cosmos-db'
   scope: resourceGroup(resourceGroupName)
   params: {
-    accountName: !empty(cosmosDbAccountName) ? cosmosDbAccountName : '${abbrs.documentDBDatabaseAccounts}${resourceToken}'
+    accountName: cosmosDbAccountName
     location:location
     tags: tags
     vNetName: vnetExisting.outputs.vnetName
@@ -499,7 +506,7 @@ module storageAccount './modules/functionapp/storageaccount.bicep' = {
   params: {
     location: location
     tags: tags
-    storageAccountName: !empty(storageAccountName) ? storageAccountName : 'funcusage${resourceToken}'
+    storageAccountName: storageAccountName
     vNetName: vnetExisting.outputs.vnetName
     privateEndpointSubnetName: vnetExisting.outputs.storageAccountPrivateEndpointSubnetName
     storageBlobDnsZoneName: storageBlobPrivateDnsZoneName
@@ -514,7 +521,7 @@ module storageAccount './modules/functionapp/storageaccount.bicep' = {
     logicContentShareName: logicContentShareName
     vNetRG: vnetExisting.outputs.vnetRG
     dnsZoneRG: dnsZoneRG
-    dnsSubscriptionId: !empty(dnsSubscriptionId) ? dnsSubscriptionId : subscription().subscriptionId
+    dnsSubscriptionId: dnsSubscriptionId
   }
   dependsOn: [
     vnetExisting
@@ -527,7 +534,7 @@ module logicApp './modules/logicapp/logicapp.bicep' = {
   params: {
     location: location
     tags: tags
-    logicAppName: !empty(usageProcessingLogicAppName) ? usageProcessingLogicAppName : '${abbrs.logicWorkflows}usage-${resourceToken}'
+    logicAppName: usageProcessingLogicAppName
     azdserviceName: 'usageProcessingLogicApp'
     storageAccountName: storageAccount.outputs.storageAccountName
     // applicationInsightsName: monitoring.outputs.funcApplicationInsightsName
@@ -560,8 +567,9 @@ module logicApp './modules/logicapp/logicapp.bicep' = {
 
 module redis './modules/redis-managed/redis-managed.bicep' = {
   name: 'redis-semcache'
+  scope: resourceGroup(resourceGroupName) // Explicitly set the scope to the target resource group and subscription
   params: {
-    location: resourceGroup().location
+    location: location
     redisClusterName: redisClusterName
     redisDatabaseName: 'default'
     skuName: skuName
@@ -571,7 +579,7 @@ module redis './modules/redis-managed/redis-managed.bicep' = {
     redisPrivateEndpointName: redisPrivateEndpointName
     vNetRG: vnetExisting.outputs.vnetRG
     dnsZoneRG: dnsZoneRG
-    dnsSubscriptionId: !empty(dnsSubscriptionId) ? dnsSubscriptionId : subscription().subscriptionId
+    dnsSubscriptionId: dnsSubscriptionId
     publicNetworkAccess: 'Disabled'
     tags: {
       workload: 'apim-semcache'
@@ -582,6 +590,7 @@ module redis './modules/redis-managed/redis-managed.bicep' = {
 
 module redisKeys './modules/redis-managed/get-redis-enterprise-keys.bicep' = {
   name: 'redis-keys'
+  scope: resourceGroup(resourceGroupName)
   params: {
     clusterName: redisClusterName
     databaseName: 'default'

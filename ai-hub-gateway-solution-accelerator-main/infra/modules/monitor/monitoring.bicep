@@ -1,11 +1,11 @@
-targetScope = 'resourceGroup'
-
 // RG for existing AMPLS
 param privateLinkScopeRgName string
 param privateLinkScopeSubId string = subscription().subscriptionId
 param privateLinkScopeName string
 
 param apimApplicationInsightsName string
+param apimApplicationInsightsRgName string
+param apimApplicationInsightsSubscriptionId string
 param apimApplicationInsightsDashboardName string
 param location string
 param tags object = {}
@@ -16,6 +16,7 @@ param logAnalyticsWorkspaceResourceId string
 // 1) App Insights in its RG
 module apimApplicationInsights 'applicationinsights.bicep' = {
   name: 'application-insights'
+  scope: resourceGroup(apimApplicationInsightsSubscriptionId, apimApplicationInsightsRgName)
   params: {
     name: apimApplicationInsightsName
     dashboardName: apimApplicationInsightsDashboardName

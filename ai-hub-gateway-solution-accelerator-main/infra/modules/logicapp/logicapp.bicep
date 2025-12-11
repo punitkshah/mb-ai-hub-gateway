@@ -26,6 +26,13 @@ param dotnetFrameworkVersion string = 'v6.0'
 var docDbAccNativeContributorRoleDefinitionId = '00000000-0000-0000-0000-000000000002'
 var eventHubsDataOwnerRoleDefinitionId = resourceId('Microsoft.Authorization/roleDefinitions', 'f526a384-b230-433a-b45c-95f59c4a2dec')
 var azureMonitorLogsRoleDefinitionId = resourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05')
+var storageBlobDataOwnerRoleDefinitionId = resourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+
+resource logicAppIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${logicAppName}-identity'
+  location: location
+  tags: tags
+}
 
 param eventHubNamespaceName string
 param eventHubName string
@@ -50,7 +57,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing 
   name: storageAccountName
 }
 
-var storageAccountConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+//var storageAccountConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
 
 resource hostingPlan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: 'hosting-plan-${logicAppName}'
@@ -76,7 +83,10 @@ resource logicApp 'Microsoft.Web/sites@2024-04-01' = {
   kind: 'functionapp,workflowapp'
   tags: union(tags, { 'azd-service-name': azdserviceName })
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${logicAppIdentity.id}': {}
+    }
   }
   properties: {
     enabled: true
@@ -109,6 +119,7 @@ resource functionAppSiteConfig 'Microsoft.Web/sites/config@2024-04-01' = {
     functionsRuntimeScaleMonitoringEnabled: true
     netFrameworkVersion: dotnetFrameworkVersion
     preWarmedInstanceCount: 1
+    keyVaultReferenceIdentity: logicAppIdentity.id
     cors: {
       allowedOrigins: [
         'https://portal.azure.com'
@@ -136,14 +147,21 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
   name: 'appsettings'
   properties: {
     // APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsights.properties.ConnectionString
-    AzureWebJobsStorage: storageAccountConnectionString
+    AzureWebJobsStorage__accountName: storageAccount.name
+    AzureWebJobsStorage__credential: 'managedidentity'
+    AzureWebJobsStorage__clientId: logicAppIdentity.properties.clientId
     FUNCTIONS_EXTENSION_VERSION: '~4'
     FUNCTIONS_WORKER_RUNTIME: 'node'
     WEBSITE_NODE_DEFAULT_VERSION: '~20'
-    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: storageAccountConnectionString
-    WEBSITE_CONTENTSHARE: fileShareName
-    WEBSITE_VNET_ROUTE_ALL: '0'
+    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING__accountName: storageAccount.name
+    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING__credential: 'managedidentity'
+    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING__clientId: logicAppIdentity.properties.clientId
+    WEBSITE_VNET_ROUTE_ALL: '1'
     WEBSITE_CONTENTOVERVNET: '1'
+    WEBSITE_RUN_FROM_PACKAGE: '0'
+    
+    // Azure Functions uses this to determine which MI to use for storage/blobs
+    AZURE_CLIENT_ID: logicAppIdentity.properties.clientId
 
     eventHub_fullyQualifiedNamespace: '${eventHubNamespaceName}.servicebus.windows.net'
     eventHub_name: eventHubName
@@ -177,7 +195,7 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
 }
 
 resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-04-15' = {
-  name: guid(cosmosDbAccount.id, logicApp.id, docDbAccNativeContributorRoleDefinitionId)
+  name: guid(cosmosDbAccount.id, logicApp.id, 'system-identity', docDbAccNativeContributorRoleDefinitionId)
   parent: cosmosDbAccount
   properties: {
     principalId: logicApp.identity.principalId
@@ -186,10 +204,20 @@ resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignm
   }
 }
 
+// Storage Blob Data Owner for Logic App user-assigned identity
+resource storageBlobDataOwnerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, logicAppIdentity.id, 'user-identity', storageBlobDataOwnerRoleDefinitionId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataOwnerRoleDefinitionId
+    principalId: logicAppIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 // Event Hubs Data Owner for Logic App system identity
 resource eventHubsDataOwnerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(resourceGroup().id, logicApp.id, eventHubsDataOwnerRoleDefinitionId)
+  name: guid(resourceGroup().id, logicApp.id, 'eventhub-system', eventHubsDataOwnerRoleDefinitionId)
   scope: resourceGroup()
   properties: {
     roleDefinitionId: eventHubsDataOwnerRoleDefinitionId
@@ -216,19 +244,21 @@ resource azureMonitorReaderRoleAssignment 'Microsoft.Authorization/roleAssignmen
 
 
 
-module azureMonitorConnectionAccess 'api-connection-access.bicep' = {
-  name: 'azuremonitorlogs-access'
-  params: {
-    connectionName: 'azuremonitorlogs'
-    accessPolicyName: 'azuremonitorlogs-access'
-    identityPrincipalId: logicApp.identity.principalId
-    location: location
-  }
-  dependsOn: [
-    azureMonitorConnection
-    logicApp
-  ]
-}
+// Commented out: This module frequently fails with InternalServerError
+// The access policy can be created manually or after initial deployment succeeds
+// module azureMonitorConnectionAccess 'api-connection-access.bicep' = {
+//   name: 'azuremonitorlogs-access'
+//   params: {
+//     connectionName: 'azuremonitorlogs'
+//     accessPolicyName: 'azuremonitorlogs-access'
+//     identityPrincipalId: logicApp.identity.principalId
+//     location: location
+//   }
+//   dependsOn: [
+//     azureMonitorConnection
+//     logicApp
+//   ]
+// }
 
 
 

@@ -1,3 +1,4 @@
+targetScope = 'resourceGroup'
 @description('Azure region for the Redis cluster.')
 param location string = resourceGroup().location
 
@@ -38,19 +39,19 @@ param dnsSubscriptionId string
 param vNetRG string
 
 
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-08-01-preview' = {
   name: redisClusterName
   location: location
   tags: tags
   sku: {
     name: skuName
-    // capacity: effectiveCapacity
   }
   properties: {
     highAvailability: 'Enabled'
     minimumTlsVersion: '1.2'
     publicNetworkAccess: publicNetworkAccess
   }
+  
 }
 
 
