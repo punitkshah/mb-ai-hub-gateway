@@ -77,7 +77,7 @@ var consistencyPolicy = {
 }
 var locations = [
   {
-    locationName: 'swedencentral' //primaryRegion
+    locationName: primaryRegion
     failoverPriority: 0
     isZoneRedundant: false
   }
@@ -108,7 +108,7 @@ resource subnet 'Microsoft.Network/virtualNetworks/subnets@2022-01-01' existing 
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' = {
   name: toLower(accountName)
-  location: location //'swedencentral'
+  location: location 
   tags: union(tags, { 'azd-service-name': accountName })
   kind: 'GlobalDocumentDB'
   properties: {

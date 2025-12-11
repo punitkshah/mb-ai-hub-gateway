@@ -57,11 +57,11 @@ resource subnet 'Microsoft.Network/virtualNetworks/subnets@2022-01-01' existing 
   parent: vnet
 }
 
-// Existing Private DNS zone for Key Vault (privatelink.vaultcore.azure.net)
-resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' existing = {
-  name: keyVaultPrivateDnsZoneName
-  scope: resourceGroup(dnsZoneRG, dnsSubscriptionId)
-}
+// // Existing Private DNS zone for Key Vault (privatelink.vaultcore.azure.net)
+// resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' existing = {
+//   name: keyVaultPrivateDnsZoneName
+//   scope: resourceGroup(dnsZoneRG, dnsSubscriptionId)
+// }
 
 // -------- Key Vault --------
 

@@ -238,10 +238,6 @@ param entraClientId string
 @description('Audience value for Microsoft Entra ID authentication (only used when entraAuth is true).')
 param entraAudience string
 
-// Load abbreviations from JSON file
-var abbrs = loadJsonContent('./abbreviations.json')
-// Generate a unique token for resources
-var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 
 var openAiPrivateDnsZoneName = 'privatelink.openai.azure.com'
 var keyVaultPrivateDnsZoneName = 'privatelink.vaultcore.azure.net'
@@ -253,7 +249,7 @@ var storageFilePrivateDnsZoneName = 'privatelink.file.core.windows.net'
 var storageTablePrivateDnsZoneName = 'privatelink.table.core.windows.net'
 var storageQueuePrivateDnsZoneName = 'privatelink.queue.core.windows.net'
 var aiCogntiveServicesDnsZoneName = 'privatelink.cognitiveservices.azure.com'
-var apimV2SkuDnsZoneName = 'privatelink.azure-api.net'
+// var apimV2SkuDnsZoneName = 'privatelink.azure-api.net'
 var redisPrivateDnsZoneName = 'privatelink.redis.azure.net'
 
 //Existing Openai Resources 
@@ -293,6 +289,12 @@ param redisPrivateEndpointName string
 
 param apimApplicationInsightsSubscriptionId string 
 
+//Key Vault parameters
+param keyVaultResourceName string 
+param keyVaultPrivateEndpointName string 
+param keyVaultPrivateEndpointSubnetName string 
+
+
 module vnetExisting './modules/networking/vnet-existing.bicep' = if (useExistingVnet) {
   name: 'vnetExisting'
   scope: resourceGroup(resourceGroupName)
@@ -306,7 +308,29 @@ module vnetExisting './modules/networking/vnet-existing.bicep' = if (useExisting
     contentSafetyPrivateEndpointSubnetName: contentSafetyPrivateEndpointSubnetName
     languageApiPrivateEndpointSubnetName: languageApiPrivateEndpointSubnetName
     storageAccountPrivateEndpointSubnetName: storageAccountPrivateEndpointSubnetName
+    keyVaultPrivateEndpointSubnetName: keyVaultPrivateEndpointSubnetName
     vnetRG: existingVnetRG
+  }
+}
+
+
+
+module keyVaultModule './modules/keyvault/keyvault-private.bicep' = {
+  name: '${keyVaultResourceName}-module'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    keyVaultResourceName: keyVaultResourceName
+    location: location
+    tags: tags
+    skuName: 'standard'
+    publicNetworkAccess: 'Disabled'
+    keyVaultPrivateEndpointName: keyVaultPrivateEndpointName
+    vNetName: vnetName
+    privateEndpointSubnetName: vnetExisting.outputs.keyVaultPrivateEndpointSubnetName
+    keyVaultPrivateDnsZoneName: keyVaultPrivateDnsZoneName
+    dnsZoneRG: dnsZoneRG
+    dnsSubscriptionId: dnsSubscriptionId
+    vNetRG: existingVnetRG
   }
 }
 
@@ -322,7 +346,7 @@ module monitoring './modules/monitor/monitoring.bicep' = {
     privateLinkScopeRgName: existingPrivateLinkScopeRG
     privateLinkScopeSubId: existingPrivateLinkScopeSubId
     logAnalyticsWorkspaceResourceId: existingLaw.id
-    apimApplicationInsightsName: !empty(applicationInsightsName) ? applicationInsightsName : '${abbrs.insightsComponents}apim-${resourceToken}'
+    apimApplicationInsightsName: applicationInsightsName
     apimApplicationInsightsDashboardName: applicationInsightsDashboardName
     createDashboard: createAppInsightsDashboard
   }
@@ -347,7 +371,7 @@ module contentSafety 'modules/ai/cognitiveservices.bicep' = {
   name: 'ai-content-safety'
   scope: resourceGroup(resourceGroupName)
   params: {
-    name: !empty(aiContentSafetyName) ? aiContentSafetyName : '${abbrs.cognitiveServicesAccounts}consafety-${resourceToken}'
+    name: aiContentSafetyName
     location: location
     tags: tags
     kind: 'ContentSafety'
@@ -380,7 +404,7 @@ module languageService 'modules/ai/cognitiveservices.bicep' = {
     vNetName: vnetExisting.outputs.vnetName
     vNetLocation: vnetExisting.outputs.location
     privateEndpointSubnetName: vnetExisting.outputs.languageApiPrivateEndpointSubnetName
-    aiPrivateEndpointName: !empty(languageServicePrivateEndpointName) ? languageServicePrivateEndpointName : '${abbrs.cognitiveServicesAccounts}language-pe-${resourceToken}'
+    aiPrivateEndpointName: languageServicePrivateEndpointName
     publicNetworkAccess: languageServiceExternalNetworkAccess
     openAiDnsZoneName: aiCogntiveServicesDnsZoneName
     sku: {
@@ -402,7 +426,7 @@ module eventHub './modules/event-hub/event-hub.bicep' = {
     name: eventHubNamespaceName
     location: location
     tags: tags
-    eventHubPrivateEndpointName: !empty(eventHubPrivateEndpointName) ? eventHubPrivateEndpointName : '${abbrs.eventHubNamespaces}pe-${resourceToken}'
+    eventHubPrivateEndpointName: eventHubPrivateEndpointName 
     vNetName: vnetExisting.outputs.vnetName
     privateEndpointSubnetName: vnetExisting.outputs.eventHubPrivateEndpointSubnetName
     eventHubDnsZoneName: eventHubPrivateDnsZoneName
@@ -487,7 +511,7 @@ module cosmosDb './modules/cosmos-db/cosmos-db.bicep' = {
     tags: tags
     vNetName: vnetExisting.outputs.vnetName
     cosmosDnsZoneName: cosmosDbPrivateDnsZoneName
-    cosmosPrivateEndpointName: !empty(cosmosDbPrivateEndpointName) ? cosmosDbPrivateEndpointName : '${abbrs.documentDBDatabaseAccounts}pe-${resourceToken}'
+    cosmosPrivateEndpointName: cosmosDbPrivateEndpointName 
     privateEndpointSubnetName: vnetExisting.outputs.cosmosPrivateEndpointSubnetName
     vNetRG: vnetExisting.outputs.vnetRG
     dnsZoneRG: dnsZoneRG
@@ -513,10 +537,10 @@ module storageAccount './modules/functionapp/storageaccount.bicep' = {
     storageFileDnsZoneName: storageFilePrivateDnsZoneName
     storageTableDnsZoneName: storageTablePrivateDnsZoneName
     storageQueueDnsZoneName: storageQueuePrivateDnsZoneName
-    storageBlobPrivateEndpointName: !empty(storageBlobPrivateEndpointName) ? storageBlobPrivateEndpointName : '${abbrs.storageStorageAccounts}blob-pe-${resourceToken}'
-    storageFilePrivateEndpointName: !empty(storageFilePrivateEndpointName) ? storageFilePrivateEndpointName : '${abbrs.storageStorageAccounts}file-pe-${resourceToken}'
-    storageTablePrivateEndpointName: !empty(storageTablePrivateEndpointName) ? storageTablePrivateEndpointName : '${abbrs.storageStorageAccounts}table-pe-${resourceToken}'
-    storageQueuePrivateEndpointName: !empty(storageQueuePrivateEndpointName) ? storageQueuePrivateEndpointName : '${abbrs.storageStorageAccounts}queue-pe-${resourceToken}'
+    storageBlobPrivateEndpointName: storageBlobPrivateEndpointName
+    storageFilePrivateEndpointName: storageFilePrivateEndpointName
+    storageTablePrivateEndpointName: storageTablePrivateEndpointName
+    storageQueuePrivateEndpointName: storageQueuePrivateEndpointName
     functionContentShareName: functionContentShareName
     logicContentShareName: logicContentShareName
     vNetRG: vnetExisting.outputs.vnetRG
