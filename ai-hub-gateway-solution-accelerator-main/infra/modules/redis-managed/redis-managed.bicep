@@ -98,7 +98,7 @@ module redisPrivateEndpoint '../networking/private-endpoint.bicep' = {
   name: '${redisClusterName}-privateEndpoint'
   params: {
     groupIds: [
-      'redis' 
+      'redisEnterprise' 
     ]
     dnsZoneName: redisPrivateDnsZoneName
     name: redisPrivateEndpointName
