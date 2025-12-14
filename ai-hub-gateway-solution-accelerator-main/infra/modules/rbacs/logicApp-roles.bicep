@@ -9,12 +9,6 @@ param principalId string
 @description('Cosmos DB account name that the workload needs SQL RBAC on.')
 param cosmosDbAccountName string
 
-@description('Assign Cosmos DB built-in Data Contributor (SQL role definition 000...002).')
-param assignCosmosSqlContributor bool = true
-
-@description('Assign Event Hubs Data Owner at resourceGroup scope.')
-param assignEventHubsDataOwner bool = true
-
 @description('Name of the Storage Account')
 param storageAccountName string 
 
@@ -23,6 +17,12 @@ var storageBlobDataOwnerRoleId = subscriptionResourceId('Microsoft.Authorization
 
 var docDbAccNativeContributorRoleDefinitionId = '00000000-0000-0000-0000-000000000002'
 var eventHubsDataOwnerRoleDefinitionId = resourceId('Microsoft.Authorization/roleDefinitions', 'f526a384-b230-433a-b45c-95f59c4a2dec')
+var eventHubsDataSenderRoleDefinitionId         = resourceId('Microsoft.Authorization/roleDefinitions', '2b629674-e913-4c01-ae53-ef4638d8f975')
+
+// App Insights Component Contributor (RG scope)
+// https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/monitor#application-insights-component-contributor
+var appInsightsComponentContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions','ae349356-3a1b-4a5e-921d-050484c6347e')
+
 
 resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' existing = {
   name: cosmosDbAccountName
@@ -33,7 +33,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing 
 }
 
 // Cosmos SQL RBAC role assignment (under the Cosmos account)
-resource cosmosSqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-04-15' = if (assignCosmosSqlContributor) {
+resource cosmosSqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-04-15' = {
   name: guid(cosmosDbAccount.id, principalResourceId, docDbAccNativeContributorRoleDefinitionId)
   parent: cosmosDbAccount
   properties: {
@@ -44,7 +44,7 @@ resource cosmosSqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleA
 }
 
 // Event Hubs Data Owner (resourceGroup scope)
-resource eventHubsDataOwnerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignEventHubsDataOwner) {
+resource eventHubsDataOwnerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' ={
   name: guid(resourceGroup().id, principalResourceId, eventHubsDataOwnerRoleDefinitionId)
   scope: resourceGroup()
   properties: {
@@ -63,4 +63,28 @@ resource storageAccountFunctionAppRoleAssignment 'Microsoft.Authorization/roleAs
     roleDefinitionId: storageBlobDataOwnerRoleId
   }
   scope: storageAccount
+}
+
+
+
+resource eventHubsDataSenderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, principalResourceId, eventHubsDataSenderRoleDefinitionId)
+  scope: resourceGroup()
+  properties: {
+    roleDefinitionId: eventHubsDataSenderRoleDefinitionId
+    principalId: principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+
+
+resource appInsightsComponentContributorAtRg 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, principalResourceId, appInsightsComponentContributorRoleId)
+  scope: resourceGroup()
+  properties: {
+    roleDefinitionId: appInsightsComponentContributorRoleId
+    principalId: principalId
+    principalType: 'ServicePrincipal'
+  }
 }

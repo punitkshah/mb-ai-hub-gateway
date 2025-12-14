@@ -1,13 +1,5 @@
 targetScope = 'subscription'
 
-//
-// BASIC PARAMETERS
-//
-@minLength(1)
-@maxLength(64)
-@description('Name of the the environment which is used to generate a short unique hash used in all resources.')
-param environmentName string
-
 @minLength(1)
 @description('Primary location for all resources (filtered on available regions for Azure Open AI Service).')
 @allowed([ 'uaenorth', 'southafricanorth', 'westeurope', 'southcentralus', 'australiaeast', 'canadaeast', 'eastus', 'eastus2', 'francecentral', 'japaneast', 'northcentralus', 'swedencentral', 'switzerlandnorth', 'uksouth' ])
@@ -78,22 +70,21 @@ param eventHubPrivateEndpointSubnetName string
 param contentSafetyPrivateEndpointSubnetName string
 param languageApiPrivateEndpointSubnetName string
 param storageAccountPrivateEndpointSubnetName string
-param othersPrivateEndpointSubnetName string
+// param othersPrivateEndpointSubnetName string
 
 // NSG NAMES
-param apimNsgName string
-param logicAppNsgName string
+// param apimNsgName string
+// param logicAppNsgName string
+// param cosmosPrivateEndpointNsgName string
+// param redisPrivateEndpointNsgName string
+// param eventhubPrivateEndpointNsgName string
+// param contentSafetyPrivateEndpointNsgName string
+// param languageApiPrivateEndpointNsgName string
+// param storageAccountPrivateEndpointNsgName string
+// param othersPrivateEndpointNsgName string
 
-param cosmosPrivateEndpointNsgName string
-param redisPrivateEndpointNsgName string
-param eventhubPrivateEndpointNsgName string
-param contentSafetyPrivateEndpointNsgName string
-param languageApiPrivateEndpointNsgName string
-param storageAccountPrivateEndpointNsgName string
-param othersPrivateEndpointNsgName string
-
-@description('Route Table name for API Management subnet. Leave blank to use default naming conventions.')
-param apimRouteTableName string
+// @description('Route Table name for API Management subnet. Leave blank to use default naming conventions.')
+// param apimRouteTableName string
 
 
 
@@ -388,9 +379,6 @@ module contentSafety 'modules/ai/cognitiveservices.bicep' = {
     dnsZoneRG: dnsZoneRG
     dnsSubscriptionId: dnsSubscriptionId
   }
-  dependsOn: [
-    vnetExisting
-  ]
 }
 
 module languageService 'modules/ai/cognitiveservices.bicep' = {
@@ -414,9 +402,6 @@ module languageService 'modules/ai/cognitiveservices.bicep' = {
     dnsZoneRG: dnsZoneRG
     dnsSubscriptionId: dnsSubscriptionId
   }
-  dependsOn: [
-    vnetExisting
-  ]
 }
 
 module eventHub './modules/event-hub/event-hub.bicep' = {
@@ -436,9 +421,6 @@ module eventHub './modules/event-hub/event-hub.bicep' = {
     dnsSubscriptionId: dnsSubscriptionId
     capacity: eventHubCapacityUnits
   }
-  dependsOn: [
-    vnetExisting
-  ]
 }
 
 module apim './modules/apim/apim.bicep' = {
@@ -450,7 +432,6 @@ module apim './modules/apim/apim.bicep' = {
     tags: tags
     applicationInsightsName: monitoring.outputs.applicationInsightsName
     openAiUris: [existingOpenAi.properties.endpoint]
-    // openAiUris: [for i in range(0, length(openAiInstances)): openAis[i].outputs.openAiEndpointUri]
     entraAuth: entraAuth
     clientAppId: entraAuth ? entraClientId : null
     tenantId: entraAuth ? entraTenantId : null
@@ -458,7 +439,7 @@ module apim './modules/apim/apim.bicep' = {
     eventHubName: eventHub.outputs.eventHubName
     eventHubEndpoint: eventHub.outputs.eventHubEndpoint
     eventHubPIIName: eventHub.outputs.eventHubPIIName
-    eventHubConnectionString:eventHub.outputs.eventHubConnectionString  // eventHub.outputs.eventHubEndpoint
+    eventHubConnectionString:eventHub.outputs.eventHubConnectionString  
     apimSubnetId: vnetExisting.outputs.apimSubnetId
     aiLanguageServiceUrl: languageService.outputs.aiServiceEndpoint
     contentSafetyServiceUrl: contentSafety.outputs.aiServiceEndpoint
@@ -519,9 +500,6 @@ module cosmosDb './modules/cosmos-db/cosmos-db.bicep' = {
     throughput: cosmosDbRUs
     publicAccess: cosmosDbPublicAccess
   }
-  dependsOn: [
-    vnetExisting
-  ]
 }
 
 module storageAccount './modules/functionapp/storageaccount.bicep' = {
@@ -547,9 +525,6 @@ module storageAccount './modules/functionapp/storageaccount.bicep' = {
     dnsZoneRG: dnsZoneRG
     dnsSubscriptionId: dnsSubscriptionId
   }
-  dependsOn: [
-    vnetExisting
-  ]
 }
 
 module logicApp './modules/logicapp/logicapp.bicep' = {
@@ -580,13 +555,6 @@ module logicApp './modules/logicapp/logicapp.bicep' = {
     functionAppSubnetId: vnetExisting.outputs.logicAppSubnetId
     fileShareName: logicContentShareName
   }
-  dependsOn: [
-    vnetExisting
-    storageAccount
-    monitoring
-    eventHub
-    cosmosDb
-  ]
 }
 
 module redis './modules/redis-managed/redis-managed.bicep' = {
@@ -630,7 +598,7 @@ var redisConnectionString = '${redis.outputs.redisHostName}:10000,password=${red
 
 
 
-module rbac './modules/rbacs/rbac-system-identities.bicep' = {
+module apimRbac './modules/rbacs/apim-roles.bicep' = {
   name: 'rbac'
   scope: resourceGroup(resourceGroupName)
   params: {
@@ -638,15 +606,10 @@ module rbac './modules/rbacs/rbac-system-identities.bicep' = {
     location: location
     tags: tags
     apimPrincipalId: apim.outputs.apimPrincipalId
-    logicAppPrincipalId: logicApp.outputs.logicAppPrincipalId
   }
-  dependsOn: [
-    apim
-    logicApp
-  ]
 }
 
-module logicAppRbac './modules/rbacs/workload-access.bicep' = {
+module logicAppRbac './modules/rbacs/logicApp-roles.bicep' = {
   name: 'logicapp-rbac'
   scope: resourceGroup(resourceGroupName)
   params: {
@@ -654,32 +617,22 @@ module logicAppRbac './modules/rbacs/workload-access.bicep' = {
     principalId: logicApp.outputs.logicAppPrincipalId
     cosmosDbAccountName: cosmosDb.outputs.cosmosDbAccountName
     storageAccountName:storageAccountName
-    assignCosmosSqlContributor: true
-    assignEventHubsDataOwner: true
     tags: tags
   }
-  dependsOn: [
-    logicApp
-    cosmosDb
-  ]
 }
 
-// module apimRbac './modules/rbacs/workload-access.bicep' = {
-//   name: 'apim-rbac'
-//   scope: resourceGroup(resourceGroupName)
-//   params: {
-//     principalResourceId: apim.outputs.apimId
-//     principalId: apim.outputs.apimPrincipalId
-//     cosmosDbAccountName: cosmosDb.outputs.cosmosDbAccountName
-//     assignCosmosSqlContributor: false
-//     assignEventHubsDataOwner: true
-//     tags: tags
-//   }
-//   dependsOn: [
-//     apim
-//     cosmosDb
-//   ]
-// }
+// Deploy the RBAC module INTO the LAW resource group scope (cross-sub)
+module rbacLaw './modules/rbacs/log-analytics-reader.bicep' = {
+  name: 'rbac-law'
+  scope: resourceGroup(existingLogAnalyticsWorkspaceSubscriptionId, existingLogAnalyticsWorkspaceResourceGroupName)
+  params: {
+    principalId: logicApp.outputs.logicAppId
+    principalResourceId: logicApp.outputs.logicAppId
+    lawName: existingLogAnalyticsWorkspaceName
+    lawSubscriptionId: existingLogAnalyticsWorkspaceSubscriptionId
+  }
+}
+
 
 
 

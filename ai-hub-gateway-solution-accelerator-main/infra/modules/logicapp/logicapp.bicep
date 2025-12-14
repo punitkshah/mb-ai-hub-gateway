@@ -246,19 +246,19 @@ resource azureMonitorReaderRoleAssignment 'Microsoft.Authorization/roleAssignmen
 
 // Commented out: This module frequently fails with InternalServerError
 // The access policy can be created manually or after initial deployment succeeds
-// module azureMonitorConnectionAccess 'api-connection-access.bicep' = {
-//   name: 'azuremonitorlogs-access'
-//   params: {
-//     connectionName: 'azuremonitorlogs'
-//     accessPolicyName: 'azuremonitorlogs-access'
-//     identityPrincipalId: logicApp.identity.principalId
-//     location: location
-//   }
-//   dependsOn: [
-//     azureMonitorConnection
-//     logicApp
-//   ]
-// }
+module azureMonitorConnectionAccess 'api-connection-access.bicep' = {
+  name: 'azuremonitorlogs-access'
+  params: {
+    connectionName: 'azuremonitorlogs'
+    accessPolicyName: 'azuremonitorlogs-access'
+    identityPrincipalId: logicApp.identity.principalId
+    location: location
+  }
+  dependsOn: [
+    azureMonitorConnection
+    logicApp
+  ]
+}
 
 
 
