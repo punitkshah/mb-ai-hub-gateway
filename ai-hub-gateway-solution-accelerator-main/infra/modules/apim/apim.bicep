@@ -28,10 +28,10 @@ param eventHubPIIName string
 param eventHubConnectionString string
 
 
-param enableAIModelInference bool = true
-param enableOpenAIRealtime bool = true
-param enableDocumentIntelligence bool = true
-param enablePIIAnonymization bool = true
+param enableAIModelInference bool = false 
+param enableOpenAIRealtime bool = false 
+param enableDocumentIntelligence bool = false 
+param enablePIIAnonymization bool = false 
 
 param contentSafetyServiceUrl string
 param aiLanguageServiceUrl string
@@ -52,8 +52,8 @@ param semanticCacheName string = 'default'
 @description('Redis connection string used by APIM external cache.')
 param semanticCacheConnectionString string
 
-@description('Azure OpenAI embeddings deployment name used for semantic caching.')
-param embeddingsDeploymentName string
+// @description('Azure OpenAI embeddings deployment name used for semantic caching.')
+// param embeddingsDeploymentName string
 
 @description('APIM backend id used by semantic cache lookup policy for embeddings calls.')
 param embeddingsBackendId string = 'embeddings-backend'
@@ -168,8 +168,8 @@ module apimOpenaiApi './api.bicep' = {
     throttlingEventsPolicyFragment
     dynamicThrottlingAssignmentFragment
    //for semantic caching 
-   // semanticCacheLookupFragment
-   // semanticCacheStoreFragment
+   semanticCacheLookupFragment
+   semanticCacheStoreFragment
   ]
 }
 
@@ -585,6 +585,135 @@ resource ehPIIUsageLogger 'Microsoft.ApiManagement/service/loggers@2022-08-01' =
 }
 
 
+//Redis Cache for Semantic Caching
+
+param embeddingsDeploymentUrl string 
+
+// 1) External cache (Redis)
+resource externalCache 'Microsoft.ApiManagement/service/caches@2024-05-01' = if (enableSemanticCaching) {
+  parent: apimService
+  name: semanticCacheName
+  properties: {
+    connectionString: semanticCacheConnectionString
+    useFromLocation: 'default'
+    description: 'Redis external cache for semantic caching'
+  }
+}
+
+// 2) Embeddings backend with Managed Identity auth
+// NOTE: Using nested deployment because managedIdentity credentials aren’t consistently supported in Bicep typings.
+// 2) Embeddings backend with MI auth (nested deployment workaround)
+resource embeddingsBackendMi 'Microsoft.Resources/deployments@2021-04-01' = if (enableSemanticCaching) {
+  name: '${apimService.name}-embeddings-backend-mi'
+  properties: {
+    mode: 'Incremental'
+
+    // Pass values from the outer template into the nested template explicitly
+    parameters: {
+      apimName: {
+        value: apimService.name
+      }
+      embeddingsBackendId: {
+        value: embeddingsBackendId
+      }
+      embeddingsDeploymentUrl: {
+        value: embeddingsDeploymentUrl
+      }
+    }
+
+    template: {
+      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
+      contentVersion: '1.0.0.0'
+
+      // Declare nested template parameters
+      parameters: {
+        apimName: { type: 'string' }
+        embeddingsBackendId: { type: 'string' }
+        embeddingsDeploymentUrl: { type: 'string' }
+      }
+
+      resources: [
+        {
+          type: 'Microsoft.ApiManagement/service/backends'
+          apiVersion: '2024-05-01'
+          name: '[format(\'{0}/{1}\', parameters(\'apimName\'), parameters(\'embeddingsBackendId\'))]'
+          properties: {
+            title: '[parameters(\'embeddingsBackendId\')]'
+            description: 'Embeddings backend for semantic cache'
+            url: '[parameters(\'embeddingsDeploymentUrl\')]'
+            protocol: 'http'
+            tls: {
+              validateCertificateChain: true
+              validateCertificateName: true
+            }
+            credentials: {
+              header: {}
+              query: {}
+              managedIdentity: {
+                resource: 'https://cognitiveservices.azure.com/'
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+
+// Policy Fragments for semantic caching 
+
+// 3) Policy fragments
+resource semanticCacheLookupFragment 'Microsoft.ApiManagement/service/policyFragments@2022-08-01' = if (enableSemanticCaching) {
+  parent: apimService
+  name: 'semantic-cache-lookup'
+  properties: {
+    format: 'rawxml'
+    value: '''
+<fragment>
+  <choose>
+    <when condition="@(!context.Request.Headers.GetValueOrDefault("Accept","").Contains("text/event-stream")
+      && ((context.Request.Url.Path ?? "").Contains("/chat/completions") || (context.Request.Url.Path ?? "").Contains("/responses")))">
+      <azure-openai-semantic-cache-lookup
+          score-threshold="0.05"
+          embeddings-backend-id="${embeddingsBackendId}"
+          embeddings-backend-auth="system-assigned"
+          ignore-system-messages="true"
+          max-message-count="10">
+        <vary-by>@(context.Subscription?.Id ?? "no-sub")</vary-by>
+        <vary-by>@(context.Request.Url.Path)</vary-by>
+      </azure-openai-semantic-cache-lookup>
+    </when>
+  </choose>
+</fragment>
+'''
+  }
+  dependsOn: [
+    externalCache
+    embeddingsBackendMi
+  ]
+}
+
+resource semanticCacheStoreFragment 'Microsoft.ApiManagement/service/policyFragments@2022-08-01' = if (enableSemanticCaching) {
+  parent: apimService
+  name: 'semantic-cache-store'
+  properties: {
+    format: 'rawxml'
+    value: '''
+<fragment>
+  <choose>
+    <when condition="@(!context.Request.Headers.GetValueOrDefault("Accept","").Contains("text/event-stream")
+      && ((context.Request.Url.Path ?? "").Contains("/chat/completions") || (context.Request.Url.Path ?? "").Contains("/responses")))">
+      <azure-openai-semantic-cache-store duration="60" />
+    </when>
+  </choose>
+</fragment>
+'''
+  }
+  dependsOn: [
+    externalCache
+  ]
+}
 
 
 // (Your product/user/subscription resources below remain unchanged...)

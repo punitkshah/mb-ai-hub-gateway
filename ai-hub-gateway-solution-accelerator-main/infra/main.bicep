@@ -231,7 +231,6 @@ param entraAudience string
 
 
 var openAiPrivateDnsZoneName = 'privatelink.openai.azure.com'
-var keyVaultPrivateDnsZoneName = 'privatelink.vaultcore.azure.net'
 var monitorPrivateDnsZoneName = 'privatelink.monitor.azure.com'
 var eventHubPrivateDnsZoneName = 'privatelink.servicebus.windows.net'
 var cosmosDbPrivateDnsZoneName = 'privatelink.documents.azure.com'
@@ -240,8 +239,20 @@ var storageFilePrivateDnsZoneName = 'privatelink.file.core.windows.net'
 var storageTablePrivateDnsZoneName = 'privatelink.table.core.windows.net'
 var storageQueuePrivateDnsZoneName = 'privatelink.queue.core.windows.net'
 var aiCogntiveServicesDnsZoneName = 'privatelink.cognitiveservices.azure.com'
-// var apimV2SkuDnsZoneName = 'privatelink.azure-api.net'
 var redisPrivateDnsZoneName = 'privatelink.redis.azure.net'
+
+var privateDnsZoneNames = [
+  openAiPrivateDnsZoneName
+  monitorPrivateDnsZoneName
+  eventHubPrivateDnsZoneName
+  cosmosDbPrivateDnsZoneName
+  storageBlobPrivateDnsZoneName
+  storageFilePrivateDnsZoneName
+  storageTablePrivateDnsZoneName
+  storageQueuePrivateDnsZoneName
+  aiCogntiveServicesDnsZoneName
+  redisPrivateDnsZoneName
+]
 
 //Existing Openai Resources 
 @description('Name of the existing Azure OpenAI (Cognitive Services) account to reuse.')
@@ -268,7 +279,7 @@ param existingPrivateLinkScopeSubId string
 
 // Redis Parameters 
 @description('Name of the embdedding deplyment to be used for caching')
-param embeddingsDeploymentName string 
+param embeddingsDeploymentUrl string 
 
 @description('name of the Redis Cluster')
 param redisClusterName string
@@ -280,10 +291,6 @@ param redisPrivateEndpointName string
 
 param apimApplicationInsightsSubscriptionId string 
 
-//Key Vault parameters
-param keyVaultResourceName string 
-param keyVaultPrivateEndpointName string 
-param keyVaultPrivateEndpointSubnetName string 
 
 
 module vnetExisting './modules/networking/vnet-existing.bicep' = if (useExistingVnet) {
@@ -299,31 +306,16 @@ module vnetExisting './modules/networking/vnet-existing.bicep' = if (useExisting
     contentSafetyPrivateEndpointSubnetName: contentSafetyPrivateEndpointSubnetName
     languageApiPrivateEndpointSubnetName: languageApiPrivateEndpointSubnetName
     storageAccountPrivateEndpointSubnetName: storageAccountPrivateEndpointSubnetName
-    keyVaultPrivateEndpointSubnetName: keyVaultPrivateEndpointSubnetName
     vnetRG: existingVnetRG
+    privateDnsZoneNames: privateDnsZoneNames
+    privateDnsZoneRG: dnsZoneRG
+    privateDnsZoneSubId: dnsSubscriptionId
   }
 }
 
 
 
-module keyVaultModule './modules/keyvault/keyvault-private.bicep' = {
-  name: '${keyVaultResourceName}-module'
-  scope: resourceGroup(resourceGroupName)
-  params: {
-    keyVaultResourceName: keyVaultResourceName
-    location: location
-    tags: tags
-    skuName: 'standard'
-    publicNetworkAccess: 'Disabled'
-    keyVaultPrivateEndpointName: keyVaultPrivateEndpointName
-    vNetName: vnetName
-    privateEndpointSubnetName: vnetExisting.outputs.keyVaultPrivateEndpointSubnetName
-    keyVaultPrivateDnsZoneName: keyVaultPrivateDnsZoneName
-    dnsZoneRG: dnsZoneRG
-    dnsSubscriptionId: dnsSubscriptionId
-    vNetRG: existingVnetRG
-  }
-}
+
 
 module monitoring './modules/monitor/monitoring.bicep' = {
   name: 'monitoring'
@@ -454,12 +446,13 @@ module apim './modules/apim/apim.bicep' = {
     enableSemanticCaching: true
     semanticCacheName: 'default' // recommended
     semanticCacheConnectionString: redisConnectionString
-    embeddingsDeploymentName: embeddingsDeploymentName
+    // embeddingsDeploymentName: embeddingsDeploymentName
     embeddingsBackendId: 'embeddings-backend'
     eventHubNamespaceName: eventHub.outputs.eventHubNamespaceName
+    // openAiEndpoint: existingOpenAi.properties.endpoint
+    embeddingsDeploymentUrl: embeddingsDeploymentUrl
   }
   dependsOn: [
-    vnetExisting
     eventHub
     redis
     redisKeys
@@ -467,21 +460,21 @@ module apim './modules/apim/apim.bicep' = {
 }
 
 
-module apimSemCache './modules/apim/apim-semcache.bicep' = {
-  name: 'apim-semcache'
-  scope: resourceGroup(resourceGroupName)
-  params: {
-    apimName: apim.outputs.apimName
-    redisConnectionString: redisConnectionString
-    openAiEndpoint: existingOpenAi.properties.endpoint
-    embeddingsDeploymentName: embeddingsDeploymentName
-  }
-  dependsOn: [
-    apim
-    redis
-    redisKeys
-  ]
-}
+// module apimSemCache './modules/apim/apim-semcache.bicep' = {
+//   name: 'apim-semcache'
+//   scope: resourceGroup(resourceGroupName)
+//   params: {
+//     apimName: apim.outputs.apimName
+//     redisConnectionString: redisConnectionString
+//     // openAiEndpoint: existingOpenAi.properties.endpoint
+//     embeddingsDeploymentUrl: embeddingsDeploymentUrl
+//   }
+//   dependsOn: [
+//     apim
+//     redis
+//     redisKeys
+//   ]
+// }
 
 module cosmosDb './modules/cosmos-db/cosmos-db.bicep' = {
   name: 'cosmos-db'

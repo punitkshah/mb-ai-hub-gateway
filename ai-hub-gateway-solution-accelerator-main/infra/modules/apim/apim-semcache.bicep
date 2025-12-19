@@ -3,12 +3,13 @@ param apimName string
 @secure()
 param redisConnectionString string
 
-param openAiEndpoint string
-param embeddingsDeploymentName string
+// param openAiEndpoint string
+// param embeddingsDeploymentName string
 param embeddingsBackendId string = 'embeddings-backend'
+param embeddingsDeploymentUrl string 
 
-var aoaiBase = endsWith(openAiEndpoint, '/') ? substring(openAiEndpoint, 0, length(openAiEndpoint) - 1) : openAiEndpoint
-var embeddingsBackendUrl = '${aoaiBase}/openai/deployments/${embeddingsDeploymentName}/embeddings'
+// var aoaiBase = endsWith(openAiEndpoint, '/') ? substring(openAiEndpoint, 0, length(openAiEndpoint) - 1) : openAiEndpoint
+// var embeddingsBackendUrl = '${aoaiBase}/openai/deployments/${embeddingsDeploymentName}/embeddings'
 
 resource apimService 'Microsoft.ApiManagement/service@2024-05-01' existing = {
   name: apimName
@@ -40,7 +41,7 @@ resource embeddingsBackendMi 'Microsoft.Resources/deployments@2021-04-01' = {
           name: '${apimName}/${embeddingsBackendId}'
           properties: {
             description: 'Embeddings backend for semantic cache'
-            url: embeddingsBackendUrl
+            url: embeddingsDeploymentUrl
             protocol: 'http'
             credentials: {
               header: {}

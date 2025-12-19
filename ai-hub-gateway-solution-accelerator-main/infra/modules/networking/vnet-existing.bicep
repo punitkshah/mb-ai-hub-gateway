@@ -9,7 +9,11 @@ param eventHubPrivateEndpointSubnetName string
 param contentSafetyPrivateEndpointSubnetName string
 param languageApiPrivateEndpointSubnetName string
 param storageAccountPrivateEndpointSubnetName string
-param keyVaultPrivateEndpointSubnetName string 
+
+// NEW: Private DNS zones live elsewhere
+param privateDnsZoneSubId string
+param privateDnsZoneRG string
+param privateDnsZoneNames array
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2019-11-01' existing = {
   name: name
@@ -56,9 +60,16 @@ resource storageAccountPrivateEndpointSubnet 'Microsoft.Network/virtualNetworks/
   parent: virtualNetwork
 }
 
-resource keyVaultPrivateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' existing = {
-  name: keyVaultPrivateEndpointSubnetName
-  parent: virtualNetwork
+
+// Deploy VNet links in the DNS zone scope (cross-sub + RG)
+module dnsLinks './dns-zone-link.bicep' = {
+  name: 'privateDnsZoneVnetLinks'
+  scope: resourceGroup(privateDnsZoneSubId, privateDnsZoneRG)
+  params: {
+    vnetId: virtualNetwork.id
+    vnetName: virtualNetwork.name
+    privateDnsZoneNames: privateDnsZoneNames
+  }
 }
 
 
@@ -91,9 +102,6 @@ output languageApiPrivateEndpointSubnetId string = '${virtualNetwork.id}/subnets
 
 output storageAccountPrivateEndpointSubnetName string = storageAccountPrivateEndpointSubnet.name
 output storageAccountPrivateEndpointSubnetId string = '${virtualNetwork.id}/subnets/${storageAccountPrivateEndpointSubnetName}'
-
-output keyVaultPrivateEndpointSubnetName string = keyVaultPrivateEndpointSubnet.name
-output keyVaultPrivateEndpointSubnetId string = '${virtualNetwork.id}/subnets/${keyVaultPrivateEndpointSubnetName}'
 
 
 
