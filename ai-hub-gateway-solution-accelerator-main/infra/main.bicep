@@ -460,6 +460,17 @@ module apim './modules/apim/apim.bicep' = {
 }
 
 
+module embeddingsBackendModule './modules/apim/embeddings-backend.bicep' =  {
+  name: 'embeddings-backend-mi'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    apimName: apim.outputs.apimName
+    embeddingsBackendId: 'embeddings-backend'
+    embeddingsDeploymentUrl: embeddingsDeploymentUrl
+  }
+}
+
+
 // module apimSemCache './modules/apim/apim-semcache.bicep' = {
 //   name: 'apim-semcache'
 //   scope: resourceGroup(resourceGroupName)

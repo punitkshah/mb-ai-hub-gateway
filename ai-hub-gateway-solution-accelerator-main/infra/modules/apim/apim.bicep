@@ -589,6 +589,10 @@ resource ehPIIUsageLogger 'Microsoft.ApiManagement/service/loggers@2022-08-01' =
 
 param embeddingsDeploymentUrl string 
 
+// Build a full backend name in the OUTER template
+var embeddingsBackendFullName = '${apimService.name}/${embeddingsBackendId}'
+
+
 // 1) External cache (Redis)
 resource externalCache 'Microsoft.ApiManagement/service/caches@2024-05-01' = if (enableSemanticCaching) {
   parent: apimService
@@ -600,65 +604,6 @@ resource externalCache 'Microsoft.ApiManagement/service/caches@2024-05-01' = if 
   }
 }
 
-// 2) Embeddings backend with Managed Identity auth
-// NOTE: Using nested deployment because managedIdentity credentials aren’t consistently supported in Bicep typings.
-// 2) Embeddings backend with MI auth (nested deployment workaround)
-resource embeddingsBackendMi 'Microsoft.Resources/deployments@2021-04-01' = if (enableSemanticCaching) {
-  name: '${apimService.name}-embeddings-backend-mi'
-  properties: {
-    mode: 'Incremental'
-
-    // Pass values from the outer template into the nested template explicitly
-    parameters: {
-      apimName: {
-        value: apimService.name
-      }
-      embeddingsBackendId: {
-        value: embeddingsBackendId
-      }
-      embeddingsDeploymentUrl: {
-        value: embeddingsDeploymentUrl
-      }
-    }
-
-    template: {
-      '$schema': 'https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#'
-      contentVersion: '1.0.0.0'
-
-      // Declare nested template parameters
-      parameters: {
-        apimName: { type: 'string' }
-        embeddingsBackendId: { type: 'string' }
-        embeddingsDeploymentUrl: { type: 'string' }
-      }
-
-      resources: [
-        {
-          type: 'Microsoft.ApiManagement/service/backends'
-          apiVersion: '2024-05-01'
-          name: '[format(\'{0}/{1}\', parameters(\'apimName\'), parameters(\'embeddingsBackendId\'))]'
-          properties: {
-            title: '[parameters(\'embeddingsBackendId\')]'
-            description: 'Embeddings backend for semantic cache'
-            url: '[parameters(\'embeddingsDeploymentUrl\')]'
-            protocol: 'http'
-            tls: {
-              validateCertificateChain: true
-              validateCertificateName: true
-            }
-            credentials: {
-              header: {}
-              query: {}
-              managedIdentity: {
-                resource: 'https://cognitiveservices.azure.com/'
-              }
-            }
-          }
-        }
-      ]
-    }
-  }
-}
 
 
 // Policy Fragments for semantic caching 
@@ -690,7 +635,6 @@ resource semanticCacheLookupFragment 'Microsoft.ApiManagement/service/policyFrag
   }
   dependsOn: [
     externalCache
-    embeddingsBackendMi
   ]
 }
 
