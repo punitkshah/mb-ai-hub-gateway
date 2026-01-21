@@ -1,0 +1,141 @@
+<policies>
+    <inbound>
+        <base />
+        <!-- AAD Authorization -->
+        <include-fragment fragment-id="aad-auth" />
+        <!-- Detecting streaming request to adjust token calculations -->
+        <choose>
+            <when condition="@{
+        try
+        {
+          var body = context.Request.Body.As<JObject>(true);
+          return body != null &&
+                 body["stream"] != null &&
+                 body["stream"].Type != JTokenType.Null;
+        }
+        catch
+        {
+          return false;
+        }
+      }">
+                <set-variable name="isStream" value="@{
+          var content = (context.Request.Body?.As<JObject>(true));
+          string streamValue = content["stream"].ToString().ToLower();
+          return streamValue;
+        }" />
+            </when>
+            <otherwise>
+                <set-variable name="isStream" value="false" />
+            </otherwise>
+        </choose>
+        <!-- Deleting api-key header so it is not passed to OpenAI endpoint -->
+        <set-header name="api-key" exists-action="delete" />
+        <!-- Setting cache keys -->
+        <set-variable name="deployment-id" value="@((string)context.Request.MatchedParameters["deployment-id"])" />
+        <set-variable name="routesCacheKey" value="@((string)context.Variables["deployment-id"] + "Routes" + context.Deployment.Region + context.Api.Revision)" />
+        <set-variable name="oaClustersCacheKey" value="@("oaClusters" + context.Deployment.Region + context.Api.Revision)" />
+        <!-- RBAC: Set allowed backends (comma-separated backend-ids, empty means all are allowed) -->
+        <set-variable name="allowedBackend" value="" />
+        <!-- Getting OpenAI clusters configuration -->
+        <cache-lookup-value key="@((string)context.Variables.GetValueOrDefault<string>("oaClustersCacheKey", "ALL-CLUSTERS"))" variable-name="oaClusters" />
+        <!-- If we can't find the configuration cached, it will be loaded -->
+        <choose>
+            <when condition="@(context.Variables.ContainsKey("oaClusters") == false)">
+                <set-variable name="oaClusters" value="@{
+          // route is an Azure OpenAI API endpoint (APIM Backend)
+          JArray routes = new JArray();
+
+          // cluster is a group of routes that are capable of serving a specific deployment name
+          JArray clusters = new JArray();
+
+          // Adding all Azure OpenAI endpoints routes (which are set as APIM Backend)
+          routes.Add(new JObject()
+          {
+            { "name", "OpenAI 1" },
+            { "location", "Switzerland North" },
+            { "backend-id", "openai-backend-0" },
+            { "priority", 1},
+            { "targetTPMLimit", 1000 },
+            { "isThrottling", false },
+            { "retryAfter", DateTime.MinValue }
+          });
+
+          routes.Add(new JObject()
+          {
+            { "name", "OpenAI 2" },
+            { "location", "Switzerland North" },
+            { "backend-id", "openai-backend-1" },
+            { "priority", 2},
+            { "targetTPMLimit", 1000 },
+            { "isThrottling", false },
+            { "retryAfter", DateTime.MinValue }
+          });
+
+          routes.Add(new JObject()
+          {
+            { "name", "AIFoundry 1" },
+            { "location", "Switzerland North" },
+            { "backend-id", "openai-backend-2" },
+            { "priority", 3},
+            { "targetTPMLimit", 1000 },
+            { "isThrottling", false },
+            { "retryAfter", DateTime.MinValue }
+          });
+
+          // For each deployment name, create a cluster with the routes that can serve it
+          // It is important in your OpenAI deployments to use the same deployment name across instances
+          clusters.Add(new JObject()
+          {
+            { "deploymentName", "gpt-4.1" },
+            { "routes", new JArray(routes[0], routes[1], routes[2]) }
+          });
+
+          clusters.Add(new JObject()
+          {
+            { "deploymentName", "text-embedding-ada-002" },
+            { "routes", new JArray(routes[0], routes[1], routes[2]) }
+          });
+
+          clusters.Add(new JObject()
+          {
+            { "deploymentName", "gpt-4o" },
+            { "routes", new JArray(routes[0], routes[1], routes[2]) }
+          });
+
+          return clusters;
+        }" />
+                <!-- Cache clusters (config) -->
+                <cache-store-value key="@((string)context.Variables.GetValueOrDefault<string>("oaClustersCacheKey", "ALL-CLUSTERS"))" value="@((JArray)context.Variables["oaClusters"])" duration="86400" />
+            </when>
+        </choose>
+        <include-fragment fragment-id="validate-routes" />
+        <include-fragment fragment-id="pick-route-inbound" />
+        <!-- Backend Managed Identity -->
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" output-token-variable-name="msi-access-token" client-id="{{uami-client-id}}" ignore-error="false" />
+        <set-header name="Authorization" exists-action="override">
+            <value>@("Bearer " + (string)context.Variables["msi-access-token"])</value>
+        </set-header>
+        <!-- Per-backend+deployment TPM counter -->
+        <azure-openai-token-limit counter-key="@((string)context.Variables["backendId"] + ":" + (string)context.Variables["deployment-id"])" tokens-per-minute="20000" estimate-prompt-tokens="false" tokens-consumed-variable-name="BackendTokensConsumed" remaining-tokens-variable-name="BackendRemainingTokens" tokens-consumed-header-name="x-apim-tokens-consumed" remaining-tokens-header-name="x-apim-tokens-remaining" />
+    </inbound>
+    <backend>
+        <include-fragment fragment-id="backend-routing" />
+    </backend>
+    <outbound>
+        <base />
+        <include-fragment fragment-id="dynamic-throttling-assignment" />
+        <set-header name="x-apim-backend-id" exists-action="override">
+            <value>@((string)context.Variables.GetValueOrDefault<string>("backendId","NA"))</value>
+        </set-header>
+    </outbound>
+    <on-error>
+        <base />
+        <set-variable name="service-name" value="Azure Open AI" />
+        <set-variable name="target-deployment" value="@((string)context.Request.MatchedParameters["deployment-id"])" />
+        <include-fragment fragment-id="dynamic-throttling-assignment" />
+        <include-fragment fragment-id="throttling-events" />
+        <set-header name="x-apim-backend-id" exists-action="override">
+            <value>@((string)context.Variables.GetValueOrDefault<string>("backendId","NA"))</value>
+        </set-header>
+    </on-error>
+</policies>
