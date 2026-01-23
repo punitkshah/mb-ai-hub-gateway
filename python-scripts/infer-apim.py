@@ -1,12 +1,12 @@
 import json
-import os
 import requests
 
-APIM_URL = "https://apim-genai-lz-temp-02.azure-api.net/openai/deployments/chat/chat/completions?api-version=2024-10-21"
-SUB_KEY = os.getenv("APIM_SUBSCRIPTION_KEY", "")
+APIM_URL = "https://apim-genai-lz-temp-02.azure-api.net/openai/deployments/gpt-4.1/chat/completions?api-version=2024-10-21"
+SUB_KEY = "<APIM_SUBSCRIPTION_KEY>"
+
 
 payload = {
-    "model": "chat",
+    "model": "gpt-4.1",
     "stream": True,
     "messages": [
         {"role": "system", "content": "You are a helpful assistant that responds in Markdown."},
