@@ -1,0 +1,22 @@
+1. attach UAMI to Redis (You can do it through Portal) 
+2. save this Json as cmk-patch.json 
+
+    {
+    "properties": {
+        "encryption": {
+        "customerManagedKeyEncryption": {
+            "keyEncryptionKeyUrl": "https://<kvName>.vault.azure.net/keys/<keyName>/<keyVersion>",
+            "keyEncryptionKeyIdentity": {
+            "identityType": "userAssignedIdentity",
+            "userAssignedIdentityResourceId": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/<uamiName>"
+            }
+        }
+        }
+    }
+    }
+ 
+3. Run below az command. 
+
+    az rest --method PATCH \
+    --uri "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Cache/redisEnterprise/<redisName>?api-version=2025-07-01" \
+    --body @cmk-patch.json
