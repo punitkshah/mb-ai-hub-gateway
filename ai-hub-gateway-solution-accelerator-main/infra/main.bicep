@@ -21,14 +21,9 @@ param apimServiceName string
 @description('Name of the Application Insights dashboard for APIM. Leave blank to use default naming conventions.')
 param applicationInsightsDashboardName string
 
-// @description('Name of the Application Insights dashboard for Function/Logic App. Leave blank to use default naming conventions.')
-// param funcAplicationInsightsDashboardName string
 
 @description('Name of the Application Insights for APIM resource. Leave blank to use default naming conventions.')
 param applicationInsightsName string
-
-// @description('Name of the Application Insights for Function/Logic App resource. Leave blank to use default naming conventions.')
-// param funcApplicationInsightsName string
 
 @description('Name of the Event Hub Namespace resource. Leave blank to use default naming conventions.')
 param eventHubNamespaceName string
@@ -70,23 +65,6 @@ param eventHubPrivateEndpointSubnetName string
 param contentSafetyPrivateEndpointSubnetName string
 param languageApiPrivateEndpointSubnetName string
 param storageAccountPrivateEndpointSubnetName string
-// param othersPrivateEndpointSubnetName string
-
-// NSG NAMES
-// param apimNsgName string
-// param logicAppNsgName string
-// param cosmosPrivateEndpointNsgName string
-// param redisPrivateEndpointNsgName string
-// param eventhubPrivateEndpointNsgName string
-// param contentSafetyPrivateEndpointNsgName string
-// param languageApiPrivateEndpointNsgName string
-// param storageAccountPrivateEndpointNsgName string
-// param othersPrivateEndpointNsgName string
-
-// @description('Route Table name for API Management subnet. Leave blank to use default naming conventions.')
-// param apimRouteTableName string
-
-
 
 
 
@@ -116,8 +94,6 @@ param cosmosDbPrivateEndpointName string
 @description('Event Hub private endpoint name. Leave blank to use default naming conventions.')
 param eventHubPrivateEndpointName string
 
-// @description('Azure OpenAI private endpoint name. Leave blank to use default naming conventions.')
-// param openAiPrivateEndpointName string
 
 @description('Name of the Azure Language service private endpoint. Leave blank to use default naming conventions.')
 param languageServicePrivateEndpointName string
@@ -125,23 +101,16 @@ param languageServicePrivateEndpointName string
 @description('Name of the Azure Content Safety service private endpoint. Leave blank to use default naming conventions.')
 param aiContentSafetyPrivateEndpointName string
 
-// @description('API Management V2 private endpoint name. Leave blank to use default naming conventions.')
-// param apimV2PrivateEndpointName string
 
 // Services network access configuration
 @description('Network type for API Management service. Applies only to Premium and Developer SKUs.')
 @allowed([ 'External', 'Internal' ])
 param apimNetworkType string
 
-// @description('Use private endpoint for API Management service. Applies only to StandardV2 and PremiumV2 SKUs.')
-// param apimV2UsePrivateEndpoint bool
 
 @description('API Management service external network access. When false, APIM must have private endpoint.')
 param apimV2PublicNetworkAccess bool
 
-// @description('Azure OpenAI service public network access.')
-// @allowed([ 'Enabled', 'Disabled' ])
-// param openAIExternalNetworkAccess string
 
 @description('Cosmos DB public network access.')
 @allowed([ 'Enabled', 'Disabled' ])
@@ -217,8 +186,6 @@ param functionContentShareName string
 @description('Name of the Storage Account file share for Logic App content.')
 param logicContentShareName string
 
-// @description('OpenAI instances configuration - add more instances by modifying this object.')
-// param openAiInstances object
 
 @description('Microsoft Entra ID tenant ID for authentication (only used when entraAuth is true).')
 param entraTenantId string
@@ -312,8 +279,6 @@ module vnetExisting './modules/networking/vnet-existing.bicep' = if (useExisting
     privateDnsZoneSubId: dnsSubscriptionId
   }
 }
-
-
 
 
 
@@ -470,22 +435,6 @@ module embeddingsBackendModule './modules/apim/embeddings-backend.bicep' =  {
   }
 }
 
-
-// module apimSemCache './modules/apim/apim-semcache.bicep' = {
-//   name: 'apim-semcache'
-//   scope: resourceGroup(resourceGroupName)
-//   params: {
-//     apimName: apim.outputs.apimName
-//     redisConnectionString: redisConnectionString
-//     // openAiEndpoint: existingOpenAi.properties.endpoint
-//     embeddingsDeploymentUrl: embeddingsDeploymentUrl
-//   }
-//   dependsOn: [
-//     apim
-//     redis
-//     redisKeys
-//   ]
-// }
 
 module cosmosDb './modules/cosmos-db/cosmos-db.bicep' = {
   name: 'cosmos-db'

@@ -49,9 +49,6 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-previ
   name: cosmosDbAccountName
 }
 
-// resource applicationInsights 'Microsoft.Insights/components@2020-02-02' existing = {
-//   name: applicationInsightsName
-// }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName
@@ -128,9 +125,6 @@ resource functionAppSiteConfig 'Microsoft.Web/sites/config@2024-04-01' = {
       supportCredentials: false
     }
   }
-  // dependsOn: [
-  //   applicationInsights
-  // ]
 }
 
 module azureMonitorConnection 'api-connection.json' = {
@@ -146,7 +140,6 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
   parent: logicApp
   name: 'appsettings'
   properties: {
-      // APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsights.properties.ConnectionString
       AzureWebJobsStorage: storageAccountConnectionString
       //AzureWebJobsStorage__accountname: storageAccountName      
       FUNCTIONS_EXTENSION_VERSION:  '~4'
@@ -154,7 +147,7 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
       WEBSITE_NODE_DEFAULT_VERSION: '~20'
       WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: storageAccountConnectionString
       WEBSITE_CONTENTSHARE: fileShareName
-      WEBSITE_VNET_ROUTE_ALL: '0'
+      WEBSITE_VNET_ROUTE_ALL: '1'
       WEBSITE_CONTENTOVERVNET: '1'
       eventHub_fullyQualifiedNamespace: '${eventHubNamespaceName}.servicebus.windows.net'
       eventHub_name: eventHubName
@@ -176,61 +169,9 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
   }
   dependsOn: [
     storageAccount
-    azureMonitorConnection
   ]
 }
 
-// resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
-//   parent: logicApp
-//   name: 'appsettings'
-//   properties: {
-//     // APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsights.properties.ConnectionString
-//     AzureWebJobsStorage__accountName: storageAccount.name
-//     AzureWebJobsStorage__credential: 'managedidentity'
-//     AzureWebJobsStorage__clientId: logicAppIdentity.properties.clientId
-//     FUNCTIONS_EXTENSION_VERSION: '~4'
-//     FUNCTIONS_WORKER_RUNTIME: 'node'
-//     WEBSITE_NODE_DEFAULT_VERSION: '~20'
-//     WEBSITE_CONTENTAZUREFILECONNECTIONSTRING__accountName: storageAccount.name
-//     WEBSITE_CONTENTAZUREFILECONNECTIONSTRING__credential: 'managedidentity'
-//     WEBSITE_CONTENTAZUREFILECONNECTIONSTRING__clientId: logicAppIdentity.properties.clientId
-//     WEBSITE_VNET_ROUTE_ALL: '1'
-//     WEBSITE_CONTENTOVERVNET: '1'
-//     WEBSITE_RUN_FROM_PACKAGE: '0'
-    
-//     // Azure Functions uses this to determine which MI to use for storage/blobs
-//     AZURE_CLIENT_ID: logicAppIdentity.properties.clientId
-
-//     eventHub_fullyQualifiedNamespace: '${eventHubNamespaceName}.servicebus.windows.net'
-//     eventHub_name: eventHubName
-//     eventHub_pii_name: eventHubPIIName
-
-//     APP_KIND: 'workflowapp'
-//     AzureFunctionsJobHost_extensionBundle: 'Microsoft.Azure.Functions.ExtensionBundle.Workflows'
-
-//     CosmosDBAccount: cosmosDbAccount.name
-//     CosmosDBDatabase: cosmosDBDatabaseName
-//     CosmosDBContainerConfig: cosmosDBContainerConfigName
-//     CosmosDBContainerUsage: cosmosDBContainerUsageName
-//     CosmosDBContainerPII: cosmosDBContainerPIIName
-
-//     // NOTE: You are still using a Cosmos connection string here.
-//     // If you want MI-only, we can remove this and switch runtime bindings/auth accordingly.
-//     AzureCosmosDB_connectionString: cosmosDbAccount.listConnectionStrings().connectionStrings[0].connectionString
-
-//     AppInsights_SubscriptionId: subscription().subscriptionId
-//     AppInsights_ResourceGroup: resourceGroup().name
-//     AppInsights_Name: apimAppInsightsName
-
-//     AzureMonitor_Resource_Id: azureMonitorConnection.outputs.resourceId
-//     AzureMonitor_Api_Id: azureMonitorConnection.outputs.apiId
-//     AzureMonitor_ConnectRuntime_Url: azureMonitorConnection.outputs.connectRuntimeUrl
-//   }
-//   dependsOn: [
-//     storageAccount
-//     azureMonitorConnection
-//   ]
-// }
 
 resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-04-15' = {
   name: guid(cosmosDbAccount.id, logicApp.id, 'system-identity', docDbAccNativeContributorRoleDefinitionId)
@@ -262,9 +203,6 @@ resource eventHubsDataOwnerRoleAssignment 'Microsoft.Authorization/roleAssignmen
     principalId: logicApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
-  dependsOn: [
-    logicApp
-  ]
 }
 
 resource azureMonitorReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -275,9 +213,6 @@ resource azureMonitorReaderRoleAssignment 'Microsoft.Authorization/roleAssignmen
     principalId: logicApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
-  dependsOn: [
-    logicApp
-  ]
 }
 
 
@@ -294,7 +229,6 @@ module azureMonitorConnectionAccess 'api-connection-access.bicep' = {
   }
   dependsOn: [
     azureMonitorConnection
-    logicApp
   ]
 }
 
